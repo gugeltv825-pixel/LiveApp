@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>WebCam Studio</title>
+<style>
+  :root{
+    --bg:#0b0d10;
+    --panel:#14181d;
+    --panel-2:#1c2229;
+    --line:#262d36;
+    --text:#e8edf2;
+    --muted:#8a96a3;
+    --accent:#4fd1c5;
+    --accent-2:#f5a623;
+    --danger:#ff5a5f;
+    --rec:#ff3b30;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    overflow:hidden;
+    user-select:none;
+  }
+  #app{display:flex;flex-direction:column;height:100dvh;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex;align-items:center;gap:8px;
+    padding:10px 12px;background:var(--panel);
+    border-bottom:1px solid var(--line);
+    flex-wrap:wrap;
+  }
+  .brand{font-weight:700;font-size:15px;letter-spacing:.3px;margin-right:auto;display:flex;align-items:center;gap:8px;}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);}
+  .chip{
+    background:var(--panel-2);border:1px solid var(--line);color:var(--muted);
+    padding:7px 11px;border-radius:999px;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;
+    cursor:pointer;transition:.15s;white-space:nowrap;
+  }
+  .chip:hover{border-color:var(--accent);color:var(--text);}
+  .chip.active{background:var(--accent);color:#04211f;border-color:var(--accent);font-weight:600;}
+  .chip.warn.active{background:var(--accent-2);color:#2a1a00;border-color:var(--accent-2);}
+  .chip svg{width:15px;height:15px;}
+
+  /* ---------- Stage ---------- */
+  .stage-wrap{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#000;}
+  .stage{position:relative;width:100%;height:100%;overflow:hidden;background:#000;}
+  video{width:100%;height:100%;object-fit:cover;display:block;background:#000;}
+
+  /* Single feed */
+  .feed{position:absolute;inset:0;}
+
+  /* Dual layouts */
+  .stage.dual.split .feed{height:50%;}
+  .stage.dual.split .feed.main{top:0;bottom:auto;}
+  .stage.dual.split .feed.sub{top:50%;}
+
+  .stage.dual.pip .feed.main{inset:0;}
+  .stage.dual.pip .feed.sub{
+    top:14px;right:14px;left:auto;bottom:auto;
+    width:32%;height:26%;min-width:110px;
+    border:2px solid rgba(255,255,255,.85);border-radius:12px;overflow:hidden;
+    box-shadow:0 6px 22px rgba(0,0,0,.5);z-index:5;
+  }
+  .feed video.mirror{transform:scaleX(-1);}
+  .feed .badge{
+    position:absolute;left:8px;top:8px;background:rgba(0,0,0,.55);
+    color:#fff;font-size:11px;padding:3px 8px;border-radius:6px;z-index:6;pointer-events:none;
+  }
+  .stage.dual.split .feed.sub .badge,
+  .stage.dual.split .feed.main .badge{top:8px;}
+
+  /* Screen flash overlay */
+  #screenFlash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:40;transition:opacity .08s;}
+  #screenFlash.on{opacity:.95;}
+
+  /* Countdown */
+  #countdown{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    font-size:120px;font-weight:800;color:#fff;text-shadow:0 4px 30px rgba(0,0,0,.6);z-index:45;
+  }
+  #countdown.show{display:flex;animation:pop .9s ease;}
+  @keyframes pop{0%{transform:scale(1.6);opacity:0;}30%{opacity:1;}100%{transform:scale(1);opacity:.85;}}
+
+  /* Rec indicator */
+  #recBar{
+    position:absolute;top:12px;left:50%;transform:translateX(-50%);
+    display:none;align-items:center;gap:8px;background:rgba(0,0,0,.6);
+    padding:6px 12px;border-radius:999px;z-index:30;font-size:13px;font-variant-numeric:tabular-nums;
+  }
+  #recBar.show{display:flex;}
+  #recBar .live{width:10px;height:10px;border-radius:50%;background:var(--rec);animation:blink 1s infinite;}
+  #recBar.paused .live{animation:none;background:var(--accent-2);}
+  @keyframes blink{50%{opacity:.25;}}
+
+  /* Zoom side control */
+  .zoom-side{
+    position:absolute;right:12px;top:50%;transform:translateY(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:10px;z-index:25;
+    background:rgba(0,0,0,.4);padding:12px 8px;border-radius:999px;backdrop-filter:blur(6px);
+  }
+  .zoom-side label{font-size:10px;color:var(--muted);}
+  .zoom-side input[type=range]{
+    writing-mode:vertical-lr;direction:rtl;
+    width:8px;height:150px;accent-color:var(--accent);cursor:pointer;
+  }
+  .zoom-val{font-size:12px;font-weight:700;color:var(--accent);}
+  .wide-btn{
+    width:40px;height:40px;border-radius:50%;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;
+  }
+  .wide-btn.active{background:var(--accent-2);color:#2a1a00;border-color:var(--accent-2);}
+
+  /* ---------- Bottom controls ---------- */
+  .controls{background:var(--panel);border-top:1px solid var(--line);padding:10px 12px 14px;}
+  .row{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:10px;}
+  .row:last-child{margin-bottom:0;}
+
+  .mini{
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text);
+    padding:8px 10px;border-radius:10px;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:.15s;
+  }
+  .mini:hover{border-color:var(--accent);}
+  .mini.active{background:var(--accent);color:#04211f;border-color:var(--accent);font-weight:600;}
+  .mini.warn.active{background:var(--accent-2);color:#2a1a00;border-color:var(--accent-2);}
+  .mini svg{width:16px;height:16px;}
+  .mini:disabled{opacity:.35;cursor:not-allowed;}
+  .sel{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:8px 10px;border-radius:10px;font-size:12.5px;}
+
+  /* Shutter cluster */
+  .shutter-row{display:flex;align-items:center;justify-content:center;gap:26px;}
+  .side-slot{width:56px;display:flex;justify-content:center;}
+  .shutter{
+    width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid var(--panel-2);
+    cursor:pointer;position:relative;transition:.15s;box-shadow:0 0 0 3px rgba(255,255,255,.15);
+  }
+  .shutter:active{transform:scale(.94);}
+  .shutter.video{background:var(--rec);}
+  .shutter.recording{background:var(--rec);}
+  .shutter.recording::after{content:"";position:absolute;inset:26px;background:#fff;border-radius:6px;}
+  .round-btn{
+    width:52px;height:52px;border-radius:50%;background:var(--panel-2);border:1px solid var(--line);
+    color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;
+  }
+  .round-btn:hover{border-color:var(--accent);}
+  .round-btn.rec-photo{background:#fff;color:#111;}
+  .round-btn svg{width:22px;height:22px;}
+  .round-btn:disabled{opacity:.3;cursor:not-allowed;}
+
+  /* ---------- Modal / preview ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;
+    display:none;align-items:center;justify-content:center;padding:16px;
+  }
+  .overlay.show{display:flex;}
+  .modal{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    max-width:560px;width:100%;max-height:92dvh;overflow:auto;padding:16px;
+  }
+  .modal h3{margin:0 0 12px;font-size:16px;}
+  .modal img,.modal video{width:100%;border-radius:10px;background:#000;display:block;}
+  .modal-actions{display:flex;gap:10px;margin-top:14px;}
+  .btn{
+    flex:1;padding:12px;border-radius:10px;border:none;font-size:14px;font-weight:600;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .btn.primary{background:var(--accent);color:#04211f;}
+  .btn.ghost{background:var(--panel-2);color:var(--text);border:1px solid var(--line);}
+  .btn svg{width:18px;height:18px;}
+
+  .hint{color:var(--muted);font-size:11.5px;text-align:center;margin-top:6px;}
+  .hidden{display:none !important;}
+
+  #toast{
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text);
+    padding:10px 16px;border-radius:10px;font-size:13px;z-index:200;opacity:0;transition:.25s;pointer-events:none;max-width:90%;text-align:center;
+  }
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  @media(max-width:520px){
+    .brand span.full{display:none;}
+    #countdown{font-size:90px;}
+    .shutter-row{gap:18px;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Top bar: modes + feature toggles -->
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span><span class="full">WebCam Studio</span></div>
+    <div class="chip active" data-mode="photo">Foto</div>
+    <div class="chip" data-mode="video">Video</div>
+    <div class="chip" data-mode="dualphoto">Dual Foto</div>
+    <div class="chip" data-mode="dualvideo">Dual Video</div>
+  </div>
+
+  <!-- Stage -->
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+      <div class="feed main" id="feedMain">
+        <span class="badge" id="badgeMain">Belakang</span>
+        <video id="videoMain" autoplay playsinline muted></video>
+      </div>
+      <div class="feed sub hidden" id="feedSub">
+        <span class="badge" id="badgeSub">Depan</span>
+        <video id="videoSub" autoplay playsinline muted></video>
+      </div>
+
+      <div id="screenFlash"></div>
+      <div id="countdown"></div>
+      <div id="recBar"><span class="live"></span><span id="recTime">00:00</span></div>
+
+      <!-- Zoom control -->
+      <div class="zoom-side">
+        <div class="zoom-val" id="zoomVal">1.0x</div>
+        <input type="range" id="zoomSlider" min="1" max="8" step="0.1" value="1">
+        <label>ZOOM</label>
+        <button class="wide-btn" id="wideBtn" title="Ultra Wide">0.5x</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom controls -->
+  <div class="controls">
+    <!-- Feature row -->
+    <div class="row" id="featureRow">
+      <button class="mini" id="mirrorBtn" title="Mirror / Unmirror">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M8 7l-4 5 4 5M16 7l4 5-4 5"/></svg>
+        Mirror
+      </button>
+      <button class="mini warn" id="flashBtn" title="Flash">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg>
+        Flash
+      </button>
+
+      <!-- Timer (photo only) -->
+      <div class="mini" id="timerWrap" style="gap:4px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg>
+        <select class="sel" id="timerSel" style="border:none;background:transparent;padding:0 2px;">
+          <option value="0">Off</option>
+          <option value="3">3s</option>
+          <option value="5">5s</option>
+          <option value="8">8s</option>
+          <option value="10">10s</option>
+        </select>
+      </div>
+
+      <!-- Dual layout controls -->
+      <button class="mini hidden" id="layoutBtn" title="Layout">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M14 4v6h6"/></svg>
+        <span id="layoutLabel">PiP</span>
+      </button>
+      <button class="mini hidden" id="swapBtn" title="Swap feeds">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 16H3l4-4M3 16l4 4M17 8h4l-4-4M21 8l-4 4"/></svg>
+        Swap
+      </button>
+
+      <!-- Flip single camera -->
+      <button class="mini" id="flipBtn" title="Ganti kamera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15"/></svg>
+        Flip
+      </button>
+    </div>
+
+    <!-- Shutter row -->
+    <div class="shutter-row">
+      <div class="side-slot">
+        <!-- pause/resume during video -->
+        <button class="round-btn" id="pauseBtn" title="Pause/Resume" disabled>
+          <svg id="pauseIcon" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
+        </button>
+      </div>
+
+      <button class="shutter" id="shutter" title="Ambil"></button>
+
+      <div class="side-slot">
+        <!-- capture photo during recording -->
+        <button class="round-btn rec-photo" id="grabBtn" title="Ambil foto saat rekam" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="hint" id="hint">Mode Foto • ketuk lingkaran putih untuk mengambil</div>
+  </div>
+</div>
+
+<!-- Preview overlay -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h3 id="previewTitle">Hasil</h3>
+    <div id="previewBody"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="closePreview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        Tutup
+      </button>
+      <button class="btn primary" id="downloadBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Download
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* =========================================================================
+   WebCam Studio — single-file camera app
+   ========================================================================= */
+
+const $ = (id)=>document.getElementById(id);
+
+const els = {
+  stage:$('stage'), videoMain:$('videoMain'), videoSub:$('videoSub'),
+  feedMain:$('feedMain'), feedSub:$('feedSub'), badgeMain:$('badgeMain'), badgeSub:$('badgeSub'),
+  screenFlash:$('screenFlash'), countdown:$('countdown'), recBar:$('recBar'), recTime:$('recTime'),
+  zoomSlider:$('zoomSlider'), zoomVal:$('zoomVal'), wideBtn:$('wideBtn'),
+  mirrorBtn:$('mirrorBtn'), flashBtn:$('flashBtn'), timerWrap:$('timerWrap'), timerSel:$('timerSel'),
+  layoutBtn:$('layoutBtn'), layoutLabel:$('layoutLabel'), swapBtn:$('swapBtn'), flipBtn:$('flipBtn'),
+  shutter:$('shutter'), pauseBtn:$('pauseBtn'), pauseIcon:$('pauseIcon'), grabBtn:$('grabBtn'),
+  hint:$('hint'), overlay:$('overlay'), previewTitle:$('previewTitle'), previewBody:$('previewBody'),
+  downloadBtn:$('downloadBtn'), closePreview:$('closePreview'), toast:$('toast'),
+};
+
+const state = {
+  mode:'photo',              // photo | video | dualphoto | dualvideo
+  layout:'pip',              // pip | split
+  facing:'environment',      // for single modes
+  mirrorMain:false,
+  mirrorSub:false,
+  flash:false,
+  swapped:false,             // dual: which feed is main
+  isWide:false,
+  zoom:1,
+  recording:false,
+  paused:false,
+};
+
+// Media streams / tracks
+let streamMain=null, streamSub=null;      // main = back(env) in dual, sub = front
+let trackMain=null, trackSub=null;
+let zoomCapMain=null;                      // native zoom capability {min,max,step}
+let torchSupportedMain=false;
+
+// Recorder
+let mediaRecorder=null, recChunks=[], recTimer=null, recSeconds=0;
+let compositeCanvas=null, compositeCtx=null, compositeRAF=null; // dual video compositing
+let recCanvas=null, recCanvasCtx=null, recCanvasRAF=null;       // plain-video canvas (for live camera swap)
+let recVideoSender=null;                                        // RTCRtpSender-like handle for replaceTrack
+
+/* ---------------- Utilities ---------------- */
+function toast(msg,ms=2200){
+  els.toast.textContent=msg; els.toast.classList.add('show');
+  clearTimeout(toast._t); toast._t=setTimeout(()=>els.toast.classList.remove('show'),ms);
+}
+function fmtTime(s){const m=String(Math.floor(s/60)).padStart(2,'0');const ss=String(s%60).padStart(2,'0');return m+':'+ss;}
+function isDualMode(){return state.mode==='dualphoto'||state.mode==='dualvideo';}
+function isVideoMode(){return state.mode==='video'||state.mode==='dualvideo';}
+function stamp(){return new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);}
+
+/* ---------------- Camera setup ---------------- */
+async function stopStream(stream){
+  if(!stream) return;
+  stream.getTracks().forEach(t=>{try{t.stop();}catch(e){}});
+}
+
+async function getStream(facingOrExact, wantZoom=true){
+  // Build constraints; try to honour facing mode.
+  const video = {
+    facingMode: facingOrExact,
+    width:{ideal:1920}, height:{ideal:1080}
+  };
+  return navigator.mediaDevices.getUserMedia({video, audio:true});
+}
+
+async function initCamera(){
+  stopEverythingLive();
+  try{
+    if(isDualMode()){
+      await initDual();
+    }else{
+      await initSingle();
+    }
+    applyMirrors();
+    hookZoomCapabilities();
+    applyFlashState();
+  }catch(err){
+    console.error(err);
+    toast('Tidak bisa akses kamera: '+(err.message||err.name));
+  }
+}
+
+async function initSingle(){
+  els.feedSub.classList.add('hidden');
+  els.stage.classList.remove('dual','pip','split');
+  await stopStream(streamMain); await stopStream(streamSub); streamSub=null; trackSub=null;
+
+  streamMain = await getStream({ideal:state.facing});
+  els.videoMain.srcObject = streamMain;
+  els.videoMain.muted = true;
+  trackMain = streamMain.getVideoTracks()[0];
+  els.badgeMain.textContent = state.facing==='user'?'Depan':'Belakang';
+  els.badgeMain.classList.remove('hidden');
+}
+
+async function initDual(){
+  els.feedSub.classList.remove('hidden');
+  els.stage.classList.add('dual');
+  applyLayoutClass();
+
+  await stopStream(streamMain); await stopStream(streamSub);
+
+  // Enumerate to try picking two distinct cameras.
+  let backOk=false, frontOk=false;
+  try{
+    streamMain = await getStream({ideal:'environment'});
+    trackMain = streamMain.getVideoTracks()[0]; backOk=true;
+  }catch(e){ /* fallback below */ }
+  try{
+    streamSub = await getStream({ideal:'user'});
+    trackSub = streamSub.getVideoTracks()[0]; frontOk=true;
+  }catch(e){ /* fallback below */ }
+
+  // If a device can only open one camera at a time, simulate a dual feed.
+  if(backOk && !frontOk){
+    toast('Kamera depan tak tersedia bersamaan — feed kedua disimulasikan.');
+    streamSub = streamMain; trackSub = trackMain;
+  }else if(!backOk && frontOk){
+    toast('Kamera belakang tak tersedia bersamaan — feed kedua disimulasikan.');
+    streamMain = streamSub; trackMain = trackSub;
+  }else if(!backOk && !frontOk){
+    // last resort: any camera
+    streamMain = await getStream(true);
+    trackMain = streamMain.getVideoTracks()[0];
+    streamSub = streamMain; trackSub = trackMain;
+    toast('Hanya satu kamera terdeteksi — mode dual disimulasikan.');
+  }
+
+  els.videoMain.srcObject = streamMain; els.videoMain.muted=true;
+  els.videoSub.srcObject = streamSub; els.videoSub.muted=true;
+  els.badgeMain.textContent='Belakang';
+  els.badgeSub.textContent='Depan';
+}
+
+function hookZoomCapabilities(){
+  zoomCapMain=null; torchSupportedMain=false;
+  const t = trackMain;
+  if(t && t.getCapabilities){
+    const caps = t.getCapabilities();
+    if(caps.zoom){
+      zoomCapMain = {min:caps.zoom.min, max:caps.zoom.max, step:caps.zoom.step||0.1};
+      els.zoomSlider.min = caps.zoom.min;
+      els.zoomSlider.max = caps.zoom.max;
+      els.zoomSlider.step = caps.zoom.step||0.1;
+      els.zoomSlider.value = t.getSettings().zoom || caps.zoom.min;
+    }else{
+      // CSS zoom fallback range
+      els.zoomSlider.min=1; els.zoomSlider.max=8; els.zoomSlider.step=0.1; els.zoomSlider.value=1;
+    }
+    torchSupportedMain = !!caps.torch;
+  }
+  state.zoom = parseFloat(els.zoomSlider.value)||1;
+  updateZoomLabel();
+  applyZoom();
+}
+
+/* ---------------- Zoom ---------------- */
+function updateZoomLabel(){ els.zoomVal.textContent = (state.isWide?0.5:state.zoom).toFixed(1)+'x'; }
+
+function applyZoom(){
+  const t = trackMain;
+  if(state.isWide){
+    // wide is handled by real optics (native zoom<1 or a wide device); keep the
+    // on-screen video at natural size — no CSS shrinking.
+    paintTransform(els.videoMain, state.mirrorMain, 1);
+    paintTransform(els.videoSub, state.mirrorSub, 1);
+    return;
+  }
+  if(zoomCapMain && t){
+    // native optical/digital zoom on the sensor (true zoom)
+    const z = Math.min(zoomCapMain.max, Math.max(zoomCapMain.min, state.zoom));
+    t.applyConstraints({advanced:[{zoom:z}]}).catch(()=>cssZoom());
+  }else{
+    cssZoom(); // fallback: crop-in only (zoom in), never out
+  }
+}
+function cssZoom(){
+  // CSS transform can only ZOOM IN (scale >= 1). It can never truly "zoom out"
+  // a camera (that needs a wider lens / smaller focal length). So we clamp to 1
+  // to avoid the bug where 0.5x just shrank the video element on screen.
+  const z = Math.max(state.isWide ? 1 : state.zoom, 1);
+  paintTransform(els.videoMain, state.mirrorMain, z);
+  paintTransform(els.videoSub, state.mirrorSub, 1);
+}
+function paintTransform(videoEl, mirror, scale){
+  const s = Math.max(scale, 1);              // never below 1 → never shrink
+  const sx = (mirror ? -1 : 1) * s;
+  videoEl.style.transform = `scale(${sx},${s})`;
+}
+
+els.zoomSlider.addEventListener('input',()=>{
+  state.isWide=false; els.wideBtn.classList.remove('active');
+  state.zoom = parseFloat(els.zoomSlider.value);
+  updateZoomLabel(); applyZoom();
+});
+
+els.wideBtn.addEventListener('click',async()=>{
+  if(state.isWide){
+    // turning wide OFF → back to normal 1x
+    state.isWide=false;
+    els.wideBtn.classList.remove('active');
+    if(wideDeviceId && !isDualMode()){ await restoreMainCamera(); }
+    else if(zoomCapMain && trackMain){ trackMain.applyConstraints({advanced:[{zoom:1}]}).catch(()=>{}); }
+    state.zoom=1; els.zoomSlider.value=1;
+    updateZoomLabel(); applyZoom();
+    toast('Kembali normal 1x');
+    return;
+  }
+
+  // turning wide ON — try real optics, in order of preference:
+  // 1) native zoom that goes below 1 on the current back lens
+  if(zoomCapMain && zoomCapMain.min < 1 && trackMain){
+    try{
+      await trackMain.applyConstraints({advanced:[{zoom:zoomCapMain.min}]});
+      commitWide(zoomCapMain.min);
+      return;
+    }catch(e){/* fall through */}
+  }
+  // 2) a separate ultra-wide back camera device
+  const wideId = await findUltraWideDeviceId();
+  if(wideId && !isDualMode()){
+    const ok = await switchMainToDevice(wideId);
+    if(ok){ wideDeviceId=wideId; commitWide(0.5); return; }
+  }
+  // 3) no wider optics available → stay at 1x, don't shrink the screen
+  toast('Perangkat ini tidak punya lensa wide — tetap 1x');
+});
+
+function commitWide(labelZoom){
+  state.isWide=true;
+  els.wideBtn.classList.add('active');
+  state.zoom=1; els.zoomSlider.value=els.zoomSlider.min;
+  updateZoomLabel(); applyZoom();
+  toast('Lensa wide '+ (labelZoom<0.6?'0.5x':labelZoom+'x') +' aktif');
+}
+
+/* Try to detect a physical ultra-wide back camera by its label. */
+let wideDeviceId=null;      // device we switched to for wide
+let normalMainDeviceId=null;// remember the normal back camera to restore
+async function findUltraWideDeviceId(){
+  try{
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const cams = devs.filter(d=>d.kind==='videoinput');
+    // labels only populated after permission granted
+    const wide = cams.find(d=>/ultra.?wide|wide|0\.5|0,5/i.test(d.label))
+              || cams.find(d=>/back|rear|environment/i.test(d.label) && /wide/i.test(d.label));
+    return wide ? wide.deviceId : null;
+  }catch(e){ return null; }
+}
+async function switchMainToDevice(deviceId){
+  try{
+    if(trackMain && trackMain.getSettings) normalMainDeviceId = normalMainDeviceId || trackMain.getSettings().deviceId;
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video:{deviceId:{exact:deviceId}, width:{ideal:1920}, height:{ideal:1080}},
+      audio:true
+    });
+    await swapMainStream(newStream);
+    return true;
+  }catch(e){ console.warn(e); return false; }
+}
+async function restoreMainCamera(){
+  wideDeviceId=null;
+  if(normalMainDeviceId){
+    try{
+      const s = await navigator.mediaDevices.getUserMedia({
+        video:{deviceId:{exact:normalMainDeviceId}, width:{ideal:1920}, height:{ideal:1080}}, audio:true
+      });
+      await swapMainStream(s); return;
+    }catch(e){/* fall through */}
+  }
+  const s = await getStream({ideal:state.facing});
+  await swapMainStream(s);
+}
+
+/* Replace the main stream live. If recording (video mode), hot-swap the track
+   inside the recorder / composite so recording continues uninterrupted. */
+async function swapMainStream(newStream){
+  const oldStream = streamMain;
+  streamMain = newStream;
+  trackMain = newStream.getVideoTracks()[0];
+  els.videoMain.srcObject = newStream; els.videoMain.muted=true;
+
+  hookZoomCapabilities();
+  applyMirrors();
+  applyFlashState();
+
+  // Video keeps flowing because the recording canvas draws from els.videoMain,
+  // which now shows the new stream. For plain video recording we also swap the
+  // audio track into the recorder's stream so the mic follows the new camera.
+  if(state.recording && state.mode==='video' && recCanvas){
+    const recStream = mediaRecorder && mediaRecorder.stream;
+    const newAudio = newStream.getAudioTracks()[0];
+    if(recStream && newAudio){
+      recStream.getAudioTracks().forEach(t=>{ recStream.removeTrack(t); try{t.stop();}catch(_){} });
+      recStream.addTrack(newAudio);
+    }
+  }
+
+  // stop old video tracks we no longer need
+  if(oldStream && oldStream!==newStream){
+    oldStream.getVideoTracks().forEach(t=>{ if(t!==trackMain) try{t.stop();}catch(_){} });
+    if(!(state.recording && state.mode==='video')){
+      oldStream.getAudioTracks().forEach(t=>{ try{t.stop();}catch(_){} });
+    }
+  }
+}
+
+/* ---------------- Mirror ---------------- */
+function applyMirrors(){
+  paintTransform(els.videoMain, state.mirrorMain, state.isWide?0.5:state.zoom);
+  paintTransform(els.videoSub, state.mirrorSub, 1);
+}
+els.mirrorBtn.addEventListener('click',()=>{
+  // In dual mode, mirror the currently-displayed main feed toggles both for simplicity? -> toggle main.
+  state.mirrorMain = !state.mirrorMain;
+  if(isDualMode()) state.mirrorSub = state.mirrorMain;
+  els.mirrorBtn.classList.toggle('active', state.mirrorMain);
+  applyMirrors();
+  toast(state.mirrorMain?'Mirror aktif':'Mirror nonaktif');
+});
+
+/* ---------------- Flash ---------------- */
+function applyFlashState(){
+  els.flashBtn.classList.toggle('active', state.flash);
+  // apply torch if supported for back camera
+  applyTorch(state.flash && !usingFrontMain());
+}
+function usingFrontMain(){
+  if(isDualMode()) return false; // main dual = back
+  return state.facing==='user';
+}
+function applyTorch(on){
+  if(trackMain && torchSupportedMain){
+    trackMain.applyConstraints({advanced:[{torch:on}]}).catch(()=>{});
+  }
+}
+els.flashBtn.addEventListener('click',()=>{
+  state.flash=!state.flash;
+  applyFlashState();
+  toast(state.flash?'Flash aktif':'Flash nonaktif');
+});
+// Screen flash (front camera) — quick white flash during capture
+function screenFlashPulse(){
+  return new Promise(res=>{
+    els.screenFlash.classList.add('on');
+    setTimeout(()=>{els.screenFlash.classList.remove('on');res();},220);
+  });
+}
+
+/* ---------------- Mode switching ---------------- */
+document.querySelectorAll('.chip[data-mode]').forEach(chip=>{
+  chip.addEventListener('click',()=>{
+    if(state.recording){ toast('Hentikan rekaman dulu.'); return; }
+    document.querySelectorAll('.chip[data-mode]').forEach(c=>c.classList.remove('active'));
+    chip.classList.add('active');
+    state.mode = chip.dataset.mode;
+    refreshModeUI();
+    initCamera();
+  });
+});
+
+function refreshModeUI(){
+  const dual = isDualMode();
+  const video = isVideoMode();
+  // shutter style
+  els.shutter.classList.toggle('video', video);
+  // timer only for plain photo
+  els.timerWrap.classList.toggle('hidden', state.mode!=='photo');
+  // dual controls
+  els.layoutBtn.classList.toggle('hidden', !dual);
+  els.swapBtn.classList.toggle('hidden', !dual);
+  // flip only for single
+  els.flipBtn.classList.toggle('hidden', dual);
+  // hints
+  const hints={
+    photo:'Mode Foto • ketuk lingkaran untuk mengambil',
+    video:'Mode Video • bisa ganti kamera (Flip) saat merekam',
+    dualphoto:'Dual Foto • atur layout & swap, lalu ambil',
+    dualvideo:'Dual Video • rekam dua kamera sekaligus',
+  };
+  els.hint.textContent = hints[state.mode];
+  // reset recording buttons
+  els.pauseBtn.disabled=true; els.grabBtn.disabled=true;
+}
+
+/* ---------------- Dual layout & swap ---------------- */
+function applyLayoutClass(){
+  els.stage.classList.toggle('pip', state.layout==='pip');
+  els.stage.classList.toggle('split', state.layout==='split');
+  els.layoutLabel.textContent = state.layout==='pip'?'PiP':'Split';
+}
+els.layoutBtn.addEventListener('click',()=>{
+  state.layout = state.layout==='pip'?'split':'pip';
+  applyLayoutClass();
+  toast('Layout: '+(state.layout==='pip'?'Picture-in-Picture':'Split Screen'));
+});
+els.swapBtn.addEventListener('click',()=>{
+  // swap sources between main and sub video elements
+  const sMain=els.videoMain.srcObject, sSub=els.videoSub.srcObject;
+  els.videoMain.srcObject=sSub; els.videoSub.srcObject=sMain;
+  const tmpT=trackMain; trackMain=trackSub; trackSub=tmpT;
+  const bM=els.badgeMain.textContent; els.badgeMain.textContent=els.badgeSub.textContent; els.badgeSub.textContent=bM;
+  state.swapped=!state.swapped;
+  hookZoomCapabilities(); applyMirrors();
+  toast('Posisi kamera ditukar');
+});
+
+/* ---------------- Flip single camera ---------------- */
+els.flipBtn.addEventListener('click',async()=>{
+  const newFacing = state.facing==='user'?'environment':'user';
+
+  if(state.recording && state.mode==='video'){
+    // Live swap without stopping the recording.
+    els.flipBtn.disabled=true;
+    try{
+      const newStream = await getStream({ideal:newFacing});
+      state.facing = newFacing;
+      state.mirrorMain = (newFacing==='user');
+      els.mirrorBtn.classList.toggle('active',state.mirrorMain);
+      state.isWide=false; els.wideBtn.classList.remove('active');
+      await swapMainStream(newStream);
+      els.badgeMain.textContent = newFacing==='user'?'Depan':'Belakang';
+      toast('Kamera diganti saat merekam');
+    }catch(e){
+      toast('Gagal ganti kamera: '+(e.message||e.name));
+    }finally{
+      els.flipBtn.disabled=false;
+    }
+    return;
+  }
+
+  if(state.recording){toast('Ganti kamera hanya untuk video biasa saat merekam.');return;}
+
+  state.facing = newFacing;
+  state.mirrorMain = state.facing==='user';
+  els.mirrorBtn.classList.toggle('active',state.mirrorMain);
+  await initCamera();
+});
+
+/* =========================================================================
+   CAPTURE — PHOTO
+   ========================================================================= */
+function drawFeedToCanvas(ctx, videoEl, dx,dy,dw,dh, mirror, scale){
+  const vw=videoEl.videoWidth, vh=videoEl.videoHeight;
+  if(!vw||!vh) return;
+  // cover fit with scale (zoom) & mirror
+  const targetRatio=dw/dh, srcRatio=vw/vh;
+  let sw,sh,sx,sy;
+  if(srcRatio>targetRatio){ sh=vh; sw=vh*targetRatio; }
+  else{ sw=vw; sh=vw/targetRatio; }
+  // apply zoom by cropping tighter
+  sw/=scale; sh/=scale;
+  sx=(vw-sw)/2; sy=(vh-sh)/2;
+  ctx.save();
+  if(mirror){ ctx.translate(dx+dw,dy); ctx.scale(-1,1); ctx.drawImage(videoEl,sx,sy,sw,sh,0,0,dw,dh); }
+  else{ ctx.drawImage(videoEl,sx,sy,sw,sh,dx,dy,dw,dh); }
+  ctx.restore();
+}
+
+async function capturePhoto(){
+  // timer only for plain photo
+  const t = parseInt(els.timerSel.value)||0;
+  if(state.mode==='photo' && t>0){ await runCountdown(t); }
+
+  // flash behaviour
+  if(state.flash){
+    if(usingFrontMain() || isDualMode()){ await screenFlashPulse(); }
+  }
+
+  const W=1280;
+  const canvas=document.createElement('canvas');
+  const ctx=canvas.getContext('2d');
+
+  if(!isDualMode()){
+    const vw=els.videoMain.videoWidth||1280, vh=els.videoMain.videoHeight||720;
+    canvas.width=vw; canvas.height=vh;
+    ctx.fillStyle='#000'; ctx.fillRect(0,0,vw,vh);
+    drawFeedToCanvas(ctx, els.videoMain, 0,0,vw,vh, state.mirrorMain, state.isWide?0.5<1?1:0.5:state.zoom<1?1:state.zoom);
+  }else{
+    // dual: compose per layout
+    if(state.layout==='split'){
+      canvas.width=W; canvas.height=W*1.2; // portrait-ish stacked
+      const h=canvas.height/2;
+      ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+      drawFeedToCanvas(ctx, els.videoMain, 0,0,W,h, state.mirrorMain, state.zoom<1?1:state.zoom);
+      drawFeedToCanvas(ctx, els.videoSub, 0,h,W,h, state.mirrorSub, 1);
+    }else{
+      canvas.width=W; canvas.height=W*(9/16);
+      const bw=canvas.width, bh=canvas.height;
+      ctx.fillStyle='#000'; ctx.fillRect(0,0,bw,bh);
+      drawFeedToCanvas(ctx, els.videoMain, 0,0,bw,bh, state.mirrorMain, state.zoom<1?1:state.zoom);
+      // pip
+      const pw=bw*0.32, ph=bh*0.32, px=bw-pw-16, py=16;
+      ctx.save(); ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=4;
+      roundRect(ctx,px,py,pw,ph,10); ctx.clip();
+      ctx.fillStyle='#000'; ctx.fillRect(px,py,pw,ph);
+      drawFeedToCanvas(ctx, els.videoSub, px,py,pw,ph, state.mirrorSub, 1);
+      ctx.restore();
+      ctx.save(); ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=4;
+      roundRect(ctx,px,py,pw,ph,10); ctx.stroke(); ctx.restore();
+    }
+  }
+
+  const url = canvas.toDataURL('image/jpeg',0.95);
+  showPhotoPreview(url);
+}
+
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+function runCountdown(sec){
+  return new Promise(res=>{
+    let n=sec;
+    els.countdown.textContent=n;
+    els.countdown.classList.add('show');
+    const iv=setInterval(()=>{
+      n--;
+      if(n<=0){ clearInterval(iv); els.countdown.classList.remove('show'); res(); }
+      else{ els.countdown.classList.remove('show'); void els.countdown.offsetWidth; els.countdown.textContent=n; els.countdown.classList.add('show'); }
+    },1000);
+  });
+}
+
+/* =========================================================================
+   VIDEO RECORDING
+   ========================================================================= */
+function pickMime(){
+  const c=['video/mp4;codecs=h264','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+  for(const m of c){ if(window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; }
+  return '';
+}
+
+async function startRecording(){
+  recChunks=[]; recSeconds=0;
+  let recordStream;
+  recVideoSender=null;
+
+  if(state.mode==='video'){
+    // Record via a canvas that mirrors the live <video>. This lets us switch
+    // the underlying camera mid-recording without cutting the video, because
+    // the canvas keeps drawing whatever is currently in els.videoMain.
+    recordStream = buildPlainVideoStream();
+  }else{
+    // dualvideo: composite two videos onto a canvas, capture stream
+    recordStream = buildCompositeStream();
+  }
+
+  const mime=pickMime();
+  try{
+    mediaRecorder = new MediaRecorder(recordStream, mime?{mimeType:mime}:undefined);
+  }catch(e){
+    mediaRecorder = new MediaRecorder(recordStream);
+  }
+  mediaRecorder.ondataavailable=e=>{ if(e.data&&e.data.size)recChunks.push(e.data); };
+  mediaRecorder.onstop=()=>{
+    stopComposite();
+    stopPlainVideo();
+    recVideoSender=null;
+    const type = mediaRecorder.mimeType || 'video/webm';
+    const blob=new Blob(recChunks,{type});
+    showVideoPreview(blob,type);
+  };
+  mediaRecorder.start(100);
+
+  state.recording=true; state.paused=false;
+  els.shutter.classList.add('recording');
+  els.pauseBtn.disabled=false; els.grabBtn.disabled=false;
+  els.recBar.classList.add('show'); els.recBar.classList.remove('paused');
+  recTimer=setInterval(()=>{ if(!state.paused){recSeconds++; els.recTime.textContent=fmtTime(recSeconds);} },1000);
+  toast('Rekaman dimulai');
+}
+
+function stopRecording(){
+  if(!mediaRecorder) return;
+  clearInterval(recTimer);
+  try{ mediaRecorder.stop(); }catch(e){}
+  state.recording=false; state.paused=false;
+  els.shutter.classList.remove('recording');
+  els.pauseBtn.disabled=true; els.grabBtn.disabled=true;
+  els.recBar.classList.remove('show','paused');
+  setPauseIcon(false);
+}
+
+els.pauseBtn.addEventListener('click',()=>{
+  if(!mediaRecorder||!state.recording) return;
+  if(state.paused){
+    mediaRecorder.resume(); state.paused=false;
+    els.recBar.classList.remove('paused'); setPauseIcon(false); toast('Lanjut merekam');
+  }else{
+    mediaRecorder.pause(); state.paused=true;
+    els.recBar.classList.add('paused'); setPauseIcon(true); toast('Rekaman dijeda');
+  }
+});
+function setPauseIcon(showPlay){
+  els.pauseIcon.innerHTML = showPlay
+    ? '<path d="M6 4l14 8-14 8z"/>'
+    : '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>';
+}
+
+// Grab a still while recording (does not stop the video)
+els.grabBtn.addEventListener('click',async()=>{
+  if(!state.recording) return;
+  if(state.flash && (usingFrontMain()||isDualMode())) await screenFlashPulse();
+  const canvas=document.createElement('canvas');
+  const ctx=canvas.getContext('2d');
+  if(!isDualMode()){
+    if(recCanvas){ // plain video: reuse the exact recorded frame
+      canvas.width=recCanvas.width; canvas.height=recCanvas.height;
+      ctx.drawImage(recCanvas,0,0);
+    }else{
+      const vw=els.videoMain.videoWidth||1280, vh=els.videoMain.videoHeight||720;
+      canvas.width=vw; canvas.height=vh;
+      drawFeedToCanvas(ctx,els.videoMain,0,0,vw,vh,state.mirrorMain,state.zoom<1?1:state.zoom);
+    }
+  }else if(compositeCanvas){
+    canvas.width=compositeCanvas.width; canvas.height=compositeCanvas.height;
+    ctx.drawImage(compositeCanvas,0,0);
+  }
+  // auto-download the grabbed frame without interrupting preview flow
+  canvas.toBlob(b=>{
+    const url=URL.createObjectURL(b);
+    triggerDownload(url,'grab-'+stamp()+'.jpg');
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+    toast('Foto tersimpan (saat merekam)');
+  },'image/jpeg',0.95);
+});
+
+/* --------- Plain video via canvas (enables live camera swap) --------- */
+function buildPlainVideoStream(){
+  recCanvas=document.createElement('canvas');
+  const vw=els.videoMain.videoWidth||1280, vh=els.videoMain.videoHeight||720;
+  recCanvas.width=vw; recCanvas.height=vh;
+  recCanvasCtx=recCanvas.getContext('2d');
+
+  const draw=()=>{
+    const cw=recCanvas.width, ch=recCanvas.height;
+    recCanvasCtx.fillStyle='#000'; recCanvasCtx.fillRect(0,0,cw,ch);
+    drawFeedToCanvas(recCanvasCtx, els.videoMain, 0,0,cw,ch, state.mirrorMain, state.isWide?1:(state.zoom<1?1:state.zoom));
+    recCanvasRAF=requestAnimationFrame(draw);
+  };
+  draw();
+
+  const canvasStream = recCanvas.captureStream(30);
+  recVideoSender = canvasStream.getVideoTracks()[0]; // not used for swap (canvas keeps drawing), kept for parity
+  const audio = streamMain && streamMain.getAudioTracks()[0];
+  if(audio) canvasStream.addTrack(audio);
+  return canvasStream;
+}
+function stopPlainVideo(){
+  if(recCanvasRAF) cancelAnimationFrame(recCanvasRAF);
+  recCanvasRAF=null; recCanvas=null; recCanvasCtx=null;
+}
+
+/* --------- Dual video compositing to a canvas stream --------- */
+function buildCompositeStream(){
+  compositeCanvas=document.createElement('canvas');
+  const isSplit = state.layout==='split';
+  if(isSplit){ compositeCanvas.width=720; compositeCanvas.height=1280; }
+  else{ compositeCanvas.width=1280; compositeCanvas.height=720; }
+  compositeCtx=compositeCanvas.getContext('2d');
+
+  const draw=()=>{
+    const cw=compositeCanvas.width, ch=compositeCanvas.height;
+    compositeCtx.fillStyle='#000'; compositeCtx.fillRect(0,0,cw,ch);
+    if(state.layout==='split'){
+      drawFeedToCanvas(compositeCtx, els.videoMain, 0,0,cw,ch/2, state.mirrorMain, state.zoom<1?1:state.zoom);
+      drawFeedToCanvas(compositeCtx, els.videoSub, 0,ch/2,cw,ch/2, state.mirrorSub, 1);
+    }else{
+      drawFeedToCanvas(compositeCtx, els.videoMain, 0,0,cw,ch, state.mirrorMain, state.zoom<1?1:state.zoom);
+      const pw=cw*0.32, ph=ch*0.32, px=cw-pw-16, py=16;
+      compositeCtx.save(); roundRect(compositeCtx,px,py,pw,ph,10); compositeCtx.clip();
+      compositeCtx.fillStyle='#000'; compositeCtx.fillRect(px,py,pw,ph);
+      drawFeedToCanvas(compositeCtx, els.videoSub, px,py,pw,ph, state.mirrorSub, 1);
+      compositeCtx.restore();
+      compositeCtx.strokeStyle='rgba(255,255,255,.9)'; compositeCtx.lineWidth=4;
+      roundRect(compositeCtx,px,py,pw,ph,10); compositeCtx.stroke();
+    }
+    compositeRAF=requestAnimationFrame(draw);
+  };
+  draw();
+
+  const canvasStream = compositeCanvas.captureStream(30);
+  // add audio from main stream (back camera mic) if present
+  const audio = (streamMain&&streamMain.getAudioTracks()[0]) || (streamSub&&streamSub.getAudioTracks()[0]);
+  if(audio) canvasStream.addTrack(audio);
+  return canvasStream;
+}
+function stopComposite(){
+  if(compositeRAF) cancelAnimationFrame(compositeRAF);
+  compositeRAF=null; compositeCanvas=null; compositeCtx=null;
+}
+
+/* =========================================================================
+   SHUTTER dispatch
+   ========================================================================= */
+els.shutter.addEventListener('click',()=>{
+  if(state.mode==='photo'||state.mode==='dualphoto'){
+    capturePhoto();
+  }else{
+    if(!state.recording) startRecording();
+    else stopRecording();
+  }
+});
+
+/* =========================================================================
+   PREVIEW + DOWNLOAD
+   ========================================================================= */
+let currentDownload={url:null,name:null};
+
+function showPhotoPreview(dataUrl){
+  els.previewTitle.textContent='Hasil Foto';
+  els.previewBody.innerHTML=`<img src="${dataUrl}" alt="preview">`;
+  currentDownload={url:dataUrl,name:'photo-'+stamp()+'.jpg'};
+  els.overlay.classList.add('show');
+}
+
+function showVideoPreview(blob,type){
+  const url=URL.createObjectURL(blob);
+  const ext = type.includes('mp4')?'mp4':'webm';
+  els.previewTitle.textContent='Hasil Video';
+  els.previewBody.innerHTML=`<video src="${url}" controls playsinline></video>`;
+  currentDownload={url,name:'video-'+stamp()+'.'+ext};
+  els.overlay.classList.add('show');
+}
+
+function triggerDownload(url,name){
+  const a=document.createElement('a');
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+}
+
+els.downloadBtn.addEventListener('click',()=>{
+  if(!currentDownload.url) return;
+  triggerDownload(currentDownload.url,currentDownload.name);
+  toast('Mengunduh '+currentDownload.name);
+});
+els.closePreview.addEventListener('click',()=>{
+  els.overlay.classList.remove('show');
+  if(currentDownload.url && currentDownload.url.startsWith('blob:')){
+    setTimeout(()=>URL.revokeObjectURL(currentDownload.url),1000);
+  }
+  els.previewBody.innerHTML='';
+});
+
+/* =========================================================================
+   Lifecycle
+   ========================================================================= */
+function stopEverythingLive(){
+  stopComposite();
+}
+
+window.addEventListener('DOMContentLoaded',async()=>{
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    toast('Browser tidak mendukung akses kamera.');
+    return;
+  }
+  refreshModeUI();
+  await initCamera();
+});
+
+// Handle tab hidden — pause torch to save battery (optional)
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden && trackMain && torchSupportedMain){ applyTorch(false); }
+  else if(!document.hidden){ applyFlashState(); }
+});
+</script>
+</body>
+</html>
